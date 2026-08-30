@@ -9,7 +9,7 @@ export type RegionId =
 export type ChannelId = "amazon" | "flipkart" | "d2c" | "offline";
 export type PlatformId = "instagram" | "youtube" | "x" | "tiktok";
 export type Urgency = "watch" | "medium" | "immediate";
-export type ViewId = "board" | "signals" | "stock" | "agent" | "cases";
+export type ViewId = "board" | "signals" | "stock" | "agent" | "matrix" | "cases";
 export type TransferStatus = "queued" | "express" | "arrived";
 
 export interface Sku {
@@ -61,6 +61,7 @@ export interface Signal {
   views: number;
   likes: number;
   shares: number;
+  comments: number;
   history: ViewPoint[];
   velocityPerHour: number;
   thresholdHit: boolean;
@@ -86,6 +87,40 @@ export interface BundleOffer {
   copy: string;
 }
 
+export interface DemandPoint {
+  day: number;
+  phase: "ramp" | "hold" | "decay" | "base";
+  liftPct: number;
+}
+
+export interface ReactionForecast {
+  bandId: string;
+  bandLabel: string;
+  nextBandLabel: string | null;
+  progressToNext: number;
+  industryPeakPct: number;
+  learnedBiasPct: number;
+  peakLiftPct: number;
+  curve: DemandPoint[];
+  extraOrders: number;
+  expectedOrders: number;
+  rampDays: number;
+  holdDays: number;
+  decayDays: number;
+  factors: {
+    views: number;
+    likes: number;
+    shares: number;
+    comments: number;
+  };
+  effectiveWeights: {
+    views: number;
+    likes: number;
+    shares: number;
+    comments: number;
+  };
+}
+
 export interface Plan {
   id: string;
   signalId: string;
@@ -102,6 +137,7 @@ export interface Plan {
   bundle: BundleOffer | null;
   forecastUpliftPct: number;
   normalizeInHours: number;
+  reaction: ReactionForecast;
   customerCopy: string;
   headline: string;
   assessment: string;
@@ -119,8 +155,13 @@ export interface CaseRecord {
   skuId: string;
   platform: PlatformId;
   peakViews: number;
+  peakLikes: number;
+  peakShares: number;
+  peakComments: number;
   peakRegion: RegionId;
   unitsMoved: number;
+  predictedUpliftPct: number;
+  actualUpliftPct: number | null;
   upliftPct: number;
   outcome: string;
   closedAt: number;

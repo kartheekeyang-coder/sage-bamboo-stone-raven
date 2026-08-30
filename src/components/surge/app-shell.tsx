@@ -6,6 +6,7 @@ import {
   Bot,
   Menu,
   Radio,
+  Table2,
   Warehouse,
 } from "lucide-react";
 import { Toaster } from "sonner";
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/signals", label: "Signals", icon: Radio },
   { to: "/stock", label: "Stock", icon: Warehouse },
   { to: "/agent", label: "Agent", icon: Bot },
+  { to: "/matrix", label: "Matrix", icon: Table2 },
   { to: "/cases", label: "Cases", icon: BookOpen },
 ] as const;
 
@@ -80,7 +82,12 @@ function MobileMenu() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const tick = useSurge((s) => s.tick);
+  const hydrateReaction = useSurge((s) => s.hydrateReaction);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  useEffect(() => {
+    hydrateReaction();
+  }, [hydrateReaction]);
 
   useEffect(() => {
     const id = window.setInterval(() => tick(), 2000);
@@ -113,7 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <main className="flex-1 pb-20 md:pb-0">{children}</main>
 
-          <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-border bg-background/95 md:hidden">
+          <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-border bg-background/95 md:hidden">
             {NAV.map((item) => {
               const Icon = item.icon;
               const active = navActive(pathname, item.to);

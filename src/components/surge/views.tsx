@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { NodeMap } from "@/components/surge/node-map";
 import { Sparkline } from "@/components/surge/sparkline";
+import { DemandCurve, FactorStrip } from "@/components/surge/demand-curve";
 import {
   CHANNELS,
   PLATFORM_LABEL,
@@ -27,6 +28,7 @@ import {
   skuById,
 } from "@/lib/surge/catalog";
 import { classifyUrgency, peakRegion } from "@/lib/surge/engine";
+import { forecastReaction } from "@/lib/surge/reaction";
 import { briefSurgePlan, mergeBriefing } from "@/lib/surge/agent";
 import { activePlan, liveKpis, selectedSignal, useSurge } from "@/lib/surge/store";
 import type { Plan, RegionId, Signal, Urgency } from "@/lib/surge/types";
@@ -129,6 +131,20 @@ export function BoardView() {
     return map;
   }, [featured, state.lots]);
 
+  const reaction = useMemo(() => {
+    if (!featured) return null;
+    return forecastReaction(
+      {
+        views: featured.views,
+        likes: featured.likes,
+        shares: featured.shares,
+        comments: featured.comments,
+      },
+      state.template,
+      featured.skuId,
+    );
+  }, [featured, state.template]);
+
   const runAgent = async () => {
     const plan = state.draftPlan();
     if (!plan || !featured) return;
@@ -174,9 +190,9 @@ export function BoardView() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Active spikes" value={String(kpis.spikes)} hint={`${kpis.watching} above watch`} />
         <Kpi
-          label="Window left"
-          value={formatHours(kpis.hoursLeft)}
-          hint={`of ${THRESHOLD_HOURS}h threshold`}
+          label="Peak demand"
+          value={reaction ? `+${reaction.peakLiftPct}%` : "—"}
+          hint="5d ramp · 3d hold"
         />
         <Kpi
           label="Units in transit"
@@ -184,9 +200,9 @@ export function BoardView() {
           hint={kpis.inTransit ? "Express lanes live" : "No moves yet"}
         />
         <Kpi
-          label="South audience"
-          value={`${Math.round(kpis.southShare * 100)}%`}
-          hint="Bengaluru · Kochi · Hyd"
+          label="Comments"
+          value={featured ? formatNumber(featured.comments) : "—"}
+          hint={featured ? `${formatNumber(featured.shares)} shares` : "No signal"}
         />
       </div>
 
@@ -215,6 +231,14 @@ export function BoardView() {
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
               <p className="text-sm leading-relaxed text-muted-foreground">{featured.caption}</p>
+              <FactorStrip
+                factors={{
+                  views: featured.views,
+                  likes: featured.likes,
+                  shares: featured.shares,
+                  comments: featured.comments,
+                }}
+              />
               <div>
                 <div className="mb-2 flex justify-between text-[11px] text-muted-foreground">
                   <span>Threshold {formatNumber(THRESHOLD_VIEWS)} / {THRESHOLD_HOURS}h</span>
@@ -235,6 +259,16 @@ export function BoardView() {
                 </div>
               </div>
               <Sparkline data={featured.history} className="h-16 text-foreground/80" />
+              {reaction ? (
+                <DemandCurve
+                  curve={reaction.curve}
+                  peakLiftPct={reaction.peakLiftPct}
+                  rampDays={reaction.rampDays}
+                  holdDays={reaction.holdDays}
+                  decayDays={reaction.decayDays}
+                  className="pt-1"
+                />
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button onClick={runAgent} disabled={state.briefing}>
                   <Play className="size-4" />
@@ -291,8 +325,8 @@ export function SignalsView() {
         </p>
         <h1 className="mt-1 text-2xl font-medium tracking-tight">Signals</h1>
         <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-          Mentions, views, and geo mix. Crossing {formatNumber(THRESHOLD_VIEWS)} views inside{" "}
-          {THRESHOLD_HOURS} hours raises an immediate spike.
+          Mentions, views, likes, shares, and comments. Crossing {formatNumber(THRESHOLD_VIEWS)} views
+          inside {THRESHOLD_HOURS} hours raises an immediate spike.
         </p>
       </div>
       <div className="flex flex-col gap-3">
@@ -322,7 +356,8 @@ export function SignalsView() {
                   <div className="text-right">
                     <div className="font-mono text-xl tabular-nums">{formatNumber(signal.views)}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      {formatNumber(signal.likes)} likes · {formatNumber(signal.shares)} shares
+                      {formatNumber(signal.likes)} likes · {formatNumber(signal.shares)} shares ·{" "}
+                      {formatNumber(signal.comments)} comments
                     </div>
                   </div>
                 </div>
@@ -439,11 +474,11 @@ export function StockView() {
 }
 
 const STEPS = [
-  { n: "01", title: "Detection", body: (p: Plan, s: Signal) => `${formatNumber(s.views)} views in ${formatHours(p.hoursOpen)} · threshold ${formatNumber(THRESHOLD_VIEWS)} / ${THRESHOLD_HOURS}h` },
+  { n: "01", title: "Detection", body: (p: Plan, s: Signal) => `${formatNumber(s.views)} views · ${formatNumber(s.likes)} likes · ${formatNumber(s.shares)} shares · ${formatNumber(s.comments)} comments in ${formatHours(p.hoursOpen)}` },
   { n: "02", title: "Assessment", body: (p: Plan) => p.assessment },
   { n: "03", title: "Reallocation", body: (p: Plan) => p.reallocations.length ? p.reallocations.map((r) => `${formatUnits(r.units)} ${REGION_LABEL[r.from]} → ${REGION_LABEL[r.to]}`).join(" · ") : "No move required" },
   { n: "04", title: "Fulfillment", body: (p: Plan) => `${p.channels.map((c) => `${CHANNELS.find((x) => x.id === c.channel)?.label} ${Math.round(c.share * 100)}%`).join(" · ")}${p.bundle ? ` · ${p.bundle.copy}` : ""}` },
-  { n: "05", title: "Forecast", body: (p: Plan) => `+${p.forecastUpliftPct}% for ${p.normalizeInHours}h, then normalize. Avoid overproduction.` },
+  { n: "05", title: "Forecast", body: (p: Plan) => `${p.reaction.bandLabel} band · industry +${p.reaction.industryPeakPct}% · learned ${p.reaction.learnedBiasPct >= 0 ? "+" : ""}${p.reaction.learnedBiasPct} → peak +${p.forecastUpliftPct}%. Ramps ${p.reaction.rampDays}d, holds ${p.reaction.holdDays}d, decays ${p.reaction.decayDays}d.` },
   { n: "06", title: "Review", body: (p: Plan) => p.sopNotes },
 ];
 
@@ -494,7 +529,7 @@ export function AgentView() {
           </p>
           <h1 className="mt-1 text-2xl font-medium tracking-tight">Surge agent</h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Six steps, hours not days. The desk computes the move instantly; Grok writes the briefing.
+            Six steps, hours not days. Views, likes, shares, and comments map to a 5-day ramp, 3-day hold, then fade. Grok writes the briefing.
           </p>
         </div>
         <Button onClick={run} disabled={busy}>
@@ -536,6 +571,14 @@ export function AgentView() {
                   <div className="font-mono text-lg tabular-nums">+{plan.forecastUpliftPct}%</div>
                 </div>
               </div>
+              <FactorStrip factors={plan.reaction.factors} />
+              <DemandCurve
+                curve={plan.reaction.curve}
+                peakLiftPct={plan.reaction.peakLiftPct}
+                rampDays={plan.reaction.rampDays}
+                holdDays={plan.reaction.holdDays}
+                decayDays={plan.reaction.decayDays}
+              />
             </CardContent>
           </Card>
 
@@ -584,6 +627,9 @@ export function AgentView() {
 export function CasesView() {
   const cases = useSurge((s) => s.cases);
   const resetWorld = useSurge((s) => s.resetWorld);
+  const logActual = useSurge((s) => s.logActual);
+  const simulateActual = useSurge((s) => s.simulateActual);
+  const [draft, setDraft] = useState<Record<string, string>>({});
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -593,7 +639,7 @@ export function CasesView() {
           </p>
           <h1 className="mt-1 text-2xl font-medium tracking-tight">Cases</h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Every spike becomes a rule. Thresholds, lanes, and hubs get sharper with each event.
+            Log what actually sold. Residuals train the matrix so the next spike is closer than the last.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={resetWorld}>
@@ -605,6 +651,8 @@ export function CasesView() {
         {cases.map((c) => {
           const inf = influencerById(c.influencerId);
           const sku = skuById(c.skuId);
+          const err =
+            c.actualUpliftPct == null ? null : c.actualUpliftPct - c.predictedUpliftPct;
           return (
             <Card key={c.id}>
               <CardContent className="flex flex-col gap-3 p-5">
@@ -612,7 +660,12 @@ export function CasesView() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs text-muted-foreground">{c.id}</span>
                     <Badge>{PLATFORM_LABEL[c.platform]}</Badge>
-                    <Badge variant="ok">+{c.upliftPct}%</Badge>
+                    <Badge variant="ok">pred +{c.predictedUpliftPct}%</Badge>
+                    {c.actualUpliftPct != null ? (
+                      <Badge variant={err && err < 0 ? "spike" : "ok"}>act +{c.actualUpliftPct}%</Badge>
+                    ) : (
+                      <Badge variant="warn">Awaiting actuals</Badge>
+                    )}
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {REGION_LABEL[c.peakRegion]}
@@ -622,10 +675,41 @@ export function CasesView() {
                   {sku.name} · {inf.name}
                 </div>
                 <p className="text-sm leading-relaxed text-muted-foreground">{c.outcome}</p>
-                <div className="flex gap-4 text-xs text-muted-foreground">
-                  <span className="font-mono tabular-nums">{formatNumber(c.peakViews)} peak</span>
+                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                  <span className="font-mono tabular-nums">{formatNumber(c.peakViews)} views</span>
+                  <span className="font-mono tabular-nums">{formatNumber(c.peakShares)} shares</span>
+                  <span className="font-mono tabular-nums">{formatNumber(c.peakComments)} comments</span>
                   <span className="font-mono tabular-nums">{formatUnits(c.unitsMoved)} moved</span>
                 </div>
+                {c.actualUpliftPct == null ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      className="h-9 w-24 rounded-md bg-secondary px-2 font-mono text-sm tabular-nums"
+                      inputMode="numeric"
+                      placeholder="actual %"
+                      value={draft[c.id] ?? ""}
+                      onChange={(e) => setDraft((d) => ({ ...d, [c.id]: e.target.value }))}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        const n = Number(draft[c.id]);
+                        if (!Number.isFinite(n)) {
+                          toast("Enter the actual peak lift %.");
+                          return;
+                        }
+                        logActual(c.id, n);
+                        toast("Logged. Matrix retrained.");
+                      }}
+                    >
+                      Train on actual
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => simulateActual(c.id)}>
+                      Simulate close
+                    </Button>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           );

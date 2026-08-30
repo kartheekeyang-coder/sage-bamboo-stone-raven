@@ -56,9 +56,11 @@ export const briefSurgePlan = createServerFn({ method: "POST" })
     const snapshot = compactSnapshot(data.signal, data.plan);
     const prompt = `You are Surge, a viral-demand response agent for an Indian D2C/CPG brand.
 Write a concise ops briefing for the live spike below. Follow the playbook and principles.
+The reaction matrix maps Instagram views, likes, shares, and comments to a peak demand lift.
+Demand ramps over ~5 days, holds ~3 days, then decays to baseline — do not overproduce.
 Return ONLY a JSON object with keys:
 headline (max 110 chars, imperative, no emoji),
-assessment (2 sentences),
+assessment (2 sentences, include the peak lift % and the 5+3 day shape),
 mismatch (1-2 sentences on demand region vs stock location),
 customerCopy (1 sentence, limited-stock urgency, no emoji),
 sopNotes (1-2 sentences of reusable learning),

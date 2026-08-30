@@ -7,6 +7,7 @@ import {
   influencerById,
   skuById,
 } from "./catalog";
+import { forecastReaction, type ReactionTemplate } from "./reaction";
 import type {
   ChannelSplit,
   Plan,
@@ -60,18 +61,26 @@ function templatedCopy(input: {
   city: string;
   hours: number;
   urgency: Urgency;
+  peakLift: number;
+  rampDays: number;
+  holdDays: number;
 }): { customerCopy: string; headline: string; assessment: string; mismatch: string; sopNotes: string } {
   const window = input.urgency === "immediate" ? "24–48 hours" : "this week";
   return {
     headline: `${input.skuName} is spiking in ${input.city}. Move stock now.`,
-    assessment: `Demand is concentrated in the South with a ${window} conversion window. Speed beats a perfect forecast — cover the spike, then let it cool.`,
+    assessment: `Engagement maps to a ${input.peakLift}% demand peak. It ramps over ${input.rampDays} days, holds ${input.holdDays} days, then fades — cover the ${window} window, do not overbuild.`,
     mismatch: `Audience heat is not where the pallets sit. Rebalance toward ${input.city} and flex safety stock in quiet hubs.`,
     customerCopy: `Limited stock on ${input.skuName}. Express dispatch from the ${input.city} hub — order in the next ${input.hours < 6 ? "few hours" : "day"} to lock delivery.`,
     sopNotes: `Parenting / South-India spikes convert fastest on Amazon + Flipkart. Pre-position Bengaluru and Kochi before the next reel, not after.`,
   };
 }
 
-export function runPlaybook(signal: Signal, lots: StockLot[], now: number): Plan {
+export function runPlaybook(
+  signal: Signal,
+  lots: StockLot[],
+  now: number,
+  template: ReactionTemplate,
+): Plan {
   const inf = influencerById(signal.influencerId);
   const sku = skuById(signal.skuId);
   const hours = hoursOpen(signal, now);
@@ -86,13 +95,20 @@ export function runPlaybook(signal: Signal, lots: StockLot[], now: number): Plan
   const stockShare = shareMap(stockByRegion);
   const totalStock = REGIONS.reduce((s, id) => s + stockByRegion[id], 0);
 
-  const conversion = inf.platform === "youtube" ? 0.008 : inf.platform === "tiktok" ? 0.014 : 0.012;
-  const expectedOrders = Math.max(80, Math.round(signal.views * conversion));
-  const coverHours = urgency === "immediate" ? 36 : 72;
-  const velocity = signal.views / hours;
-  const projectedOrders = Math.round((velocity * conversion * coverHours) / 1);
-  const unitsNeeded = Math.min(totalStock, Math.max(expectedOrders, projectedOrders));
-  const unitsAtRisk = Math.round(unitsNeeded * 0.55);
+  const reaction = forecastReaction(
+    {
+      views: signal.views,
+      likes: signal.likes,
+      shares: signal.shares,
+      comments: signal.comments,
+    },
+    template,
+    signal.skuId,
+  );
+
+  const expectedOrders = reaction.expectedOrders;
+  const unitsNeeded = Math.min(totalStock, Math.max(expectedOrders, reaction.extraOrders * 2));
+  const unitsAtRisk = reaction.extraOrders;
 
   const reallocations: Plan["reallocations"] = [];
   const remainingNeed = {} as Record<RegionId, number>;
@@ -148,14 +164,12 @@ export function runPlaybook(signal: Signal, lots: StockLot[], now: number): Plan
     city: peak === "bangalore" ? "Bengaluru" : peak === "kochi" ? "Kochi" : peak,
     hours,
     urgency,
+    peakLift: reaction.peakLiftPct,
+    rampDays: reaction.rampDays,
+    holdDays: reaction.holdDays,
   });
 
-  const uplift =
-    urgency === "immediate"
-      ? Math.min(72, Math.round(18 + signal.views / 8000))
-      : urgency === "medium"
-        ? Math.min(40, Math.round(10 + signal.views / 12000))
-        : 6;
+  const horizonHours = (reaction.rampDays + reaction.holdDays + reaction.decayDays) * 24;
 
   return {
     id: `plan-${signal.id}-${Math.round(now / 1000)}`,
@@ -176,8 +190,9 @@ export function runPlaybook(signal: Signal, lots: StockLot[], now: number): Plan
           copy: `Pair ${sku.name} with ${bundleSku.name} on the product page — the reel already did the bundling.`,
         }
       : null,
-    forecastUpliftPct: uplift,
-    normalizeInHours: urgency === "immediate" ? 48 : 72,
+    forecastUpliftPct: reaction.peakLiftPct,
+    normalizeInHours: horizonHours,
+    reaction,
     customerCopy: copy.customerCopy,
     headline: copy.headline,
     assessment: copy.assessment,
@@ -203,7 +218,7 @@ export function compactSnapshot(signal: Signal, plan: Plan) {
     principles: [
       "Speed beats accuracy: act within hours, not days.",
       "Regional agility: move stock where the hype is.",
-      "Short-lived window: viral demand fades in 2–3 days.",
+      "Short-lived window: viral demand ramps 5 days, holds 3, then fades.",
     ],
     signal: {
       influencer: inf.name,
@@ -214,8 +229,19 @@ export function compactSnapshot(signal: Signal, plan: Plan) {
       views: signal.views,
       likes: signal.likes,
       shares: signal.shares,
+      comments: signal.comments,
       hoursOpen: Number(plan.hoursOpen.toFixed(1)),
       geo: inf.geo,
+    },
+    reaction: {
+      band: plan.reaction.bandLabel,
+      industryPeakPct: plan.reaction.industryPeakPct,
+      learnedBiasPct: plan.reaction.learnedBiasPct,
+      peakLiftPct: plan.reaction.peakLiftPct,
+      rampDays: plan.reaction.rampDays,
+      holdDays: plan.reaction.holdDays,
+      decayDays: plan.reaction.decayDays,
+      extraOrders: plan.reaction.extraOrders,
     },
     plan: {
       urgency: plan.urgency,

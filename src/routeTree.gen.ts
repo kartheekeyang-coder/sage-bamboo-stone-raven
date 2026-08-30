@@ -13,6 +13,7 @@ import { Route as DeskRouteImport } from './routes/_desk'
 import { Route as DeskIndexRouteImport } from './routes/_desk/index'
 import { Route as DeskAgentRouteImport } from './routes/_desk/agent'
 import { Route as DeskCasesRouteImport } from './routes/_desk/cases'
+import { Route as DeskMatrixRouteImport } from './routes/_desk/matrix'
 import { Route as DeskSignalsRouteImport } from './routes/_desk/signals'
 import { Route as DeskStockRouteImport } from './routes/_desk/stock'
 
@@ -35,6 +36,11 @@ const DeskCasesRoute = DeskCasesRouteImport.update({
   path: '/cases',
   getParentRoute: () => DeskRoute,
 } as any)
+const DeskMatrixRoute = DeskMatrixRouteImport.update({
+  id: '/matrix',
+  path: '/matrix',
+  getParentRoute: () => DeskRoute,
+} as any)
 const DeskSignalsRoute = DeskSignalsRouteImport.update({
   id: '/signals',
   path: '/signals',
@@ -50,12 +56,14 @@ export interface FileRoutesByFullPath {
   '/': typeof DeskIndexRoute
   '/agent': typeof DeskAgentRoute
   '/cases': typeof DeskCasesRoute
+  '/matrix': typeof DeskMatrixRoute
   '/signals': typeof DeskSignalsRoute
   '/stock': typeof DeskStockRoute
 }
 export interface FileRoutesByTo {
   '/agent': typeof DeskAgentRoute
   '/cases': typeof DeskCasesRoute
+  '/matrix': typeof DeskMatrixRoute
   '/signals': typeof DeskSignalsRoute
   '/stock': typeof DeskStockRoute
   '/': typeof DeskIndexRoute
@@ -65,20 +73,22 @@ export interface FileRoutesById {
   '/_desk': typeof DeskRouteWithChildren
   '/_desk/agent': typeof DeskAgentRoute
   '/_desk/cases': typeof DeskCasesRoute
+  '/_desk/matrix': typeof DeskMatrixRoute
   '/_desk/signals': typeof DeskSignalsRoute
   '/_desk/stock': typeof DeskStockRoute
   '/_desk/': typeof DeskIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agent' | '/cases' | '/signals' | '/stock'
+  fullPaths: '/' | '/agent' | '/cases' | '/matrix' | '/signals' | '/stock'
   fileRoutesByTo: FileRoutesByTo
-  to: '/agent' | '/cases' | '/signals' | '/stock' | '/'
+  to: '/agent' | '/cases' | '/matrix' | '/signals' | '/stock' | '/'
   id:
     | '__root__'
     | '/_desk'
     | '/_desk/agent'
     | '/_desk/cases'
+    | '/_desk/matrix'
     | '/_desk/signals'
     | '/_desk/stock'
     | '/_desk/'
@@ -118,6 +128,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeskCasesRouteImport
       parentRoute: typeof DeskRoute
     }
+    '/_desk/matrix': {
+      id: '/_desk/matrix'
+      path: '/matrix'
+      fullPath: '/matrix'
+      preLoaderRoute: typeof DeskMatrixRouteImport
+      parentRoute: typeof DeskRoute
+    }
     '/_desk/signals': {
       id: '/_desk/signals'
       path: '/signals'
@@ -138,6 +155,7 @@ declare module '@tanstack/react-router' {
 interface DeskRouteChildren {
   DeskAgentRoute: typeof DeskAgentRoute
   DeskCasesRoute: typeof DeskCasesRoute
+  DeskMatrixRoute: typeof DeskMatrixRoute
   DeskSignalsRoute: typeof DeskSignalsRoute
   DeskStockRoute: typeof DeskStockRoute
   DeskIndexRoute: typeof DeskIndexRoute
@@ -146,6 +164,7 @@ interface DeskRouteChildren {
 const DeskRouteChildren: DeskRouteChildren = {
   DeskAgentRoute: DeskAgentRoute,
   DeskCasesRoute: DeskCasesRoute,
+  DeskMatrixRoute: DeskMatrixRoute,
   DeskSignalsRoute: DeskSignalsRoute,
   DeskStockRoute: DeskStockRoute,
   DeskIndexRoute: DeskIndexRoute,
